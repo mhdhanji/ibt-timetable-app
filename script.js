@@ -247,7 +247,7 @@ function checkUpcomingDepartures(ibtData) {
 async function loadTimetableData() {
     showLoading(true);
     try {
-        const res = await fetch('https://raw.githubusercontent.com/mhdhanji/ibt-timetable-app/data/ibt_data.json');
+        const res = await fetch('https://raw.githubusercontent.com/mhdhanji/ibt-timetable-app/data/data/ibt_data.json');
         const ibtData = await res.json();
         globalIbtData = ibtData;
         const isSaturday = useWeekendTimes;
