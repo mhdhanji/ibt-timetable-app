@@ -1,0 +1,93 @@
+name: Sync Data Branch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'data/**'
+      - 'data/version.json'
+
+jobs:
+  sync-data-branch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Configure Git
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+      - name: Check if data branch exists
+        id: check-branch
+        run: |
+          if git ls-remote --heads origin refs/heads/data | grep data; then
+            echo "Data branch exists"
+            echo "branch_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Data branch does not exist"
+            echo "branch_exists=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Create data branch if it doesn't exist
+        if: steps.check-branch.outputs.branch_exists == 'false'
+        run: |
+          git checkout -b data
+          git push -u origin data
+          
+      - name: Checkout data branch
+        if: steps.check-branch.outputs.branch_exists == 'true'
+        run: |
+          # Rename local data directory if it exists to avoid conflict
+          if [ -d "data" ]; then
+            mv data data_temp
+          fi
+          
+          # Explicitly checkout remote branch
+          git fetch origin
+          git checkout --track origin/data
+          
+          # Restore data directory if it was renamed
+          if [ -d "data_temp" ]; then
+            rm -rf data
+            mv data_temp data
+          fi
+          
+      - name: Copy data files from main
+        run: |
+          # Save current branch
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          
+          # Make directories if they don't exist
+          mkdir -p data
+          
+          # Get data files from main branch (using explicit path)
+          git checkout main -- ./data/ || echo "Failed to checkout data directory"
+          git checkout main -- ./data/version.json || echo "Failed to checkout data/version.json"
+          
+          # List files to verify
+          echo "Files after checkout:"
+          ls -la
+          echo "Data directory contents:"
+          ls -la data/ || echo "Data directory not found"
+          
+      - name: Commit and push changes
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            git add data/
+            git add data/version.json
+            git commit -m "Sync data from main branch [skip ci]"
+            git push origin data
+            echo "Data files synced to data branch"
+          else
+            echo "No changes to sync"
+          fi

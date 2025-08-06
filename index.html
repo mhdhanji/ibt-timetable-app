@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IBT Timetable</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="header">
+        <div class="controls-row">
+            <div class="left-controls">
+                <select id="table-select">
+                    <option value="maskew">MASKEW AVENUE</option>
+                    <option value="market">MARKET DEEPING</option>
+                    <option value="fengate">WISBECH</option>
+                </select>
+
+                <button id="refresh-button">Refresh Data</button>
+
+                <div class="toggle-container">
+                    <label class="switch">
+                        <input type="checkbox" id="day-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">Weekend Mode</span>
+                </div>
+
+                <div class="key">
+                    <span class="key-item time-thirty">30 MIN</span>
+                    <span class="key-item time-fifteen">15 MIN</span>
+                    <span class="key-item time-five">5 MIN</span>
+                    <span class="key-item past">DEPARTED</span>
+                </div>
+
+                <div class="mute-container">
+                    <button id="mute-button" class="mute-button">
+                        <span class="mute-icon">🔊</span>
+                    </button>
+                    <span class="mute-label">Sound</span>
+                </div>
+            </div>
+
+            <div class="clock-container">
+                <div id="clock"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="departure-message" class="message-overlay">
+        <div class="message-content">
+            <div class="main-message"></div>
+            <div class="detail-message"></div>
+        </div>
+    </div>
+
+    <div class="loading-overlay">
+        <div class="spinner"></div>
+        <div>Loading...</div>
+    </div>
+
+    <div id="error-message" class="error-message"></div>
+
+    <div class="content">
+        <!-- Maskew Avenue Section -->
+        <div id="maskew-section" class="timetable-section active">
+            <h2 class="subtitle">MASKEW AVENUE IBT RUNS</h2>
+            <div class="timestamp">Last Updated: <span id="update-time"></span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>IBT</th>
+                        <th>IBT TO WB</th>
+                    </tr>
+                </thead>
+                <tbody id="maskew-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Market Deeping Section -->
+        <div id="market-section" class="timetable-section">
+            <h2 class="subtitle">MARKET DEEPING IBT RUNS</h2>
+            <div class="timestamp">Last Updated: <span id="update-time"></span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>IBT</th>
+                    </tr>
+                </thead>
+                <tbody id="market-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Wisbech Section -->
+        <div id="fengate-section" class="timetable-section">
+            <h2 class="subtitle">WISBECH IBT TO HD RUNS</h2>
+            <div class="timestamp">Last Updated: <span id="update-time"></span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>IBT TO HD</th>
+                    </tr>
+                </thead>
+                <tbody id="fengate-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="data-manager.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

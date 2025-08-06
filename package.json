@@ -1,0 +1,68 @@
+{
+  "name": "ibt-timetable-app",
+  "version": "1.0.0",
+  "description": "IBT-only Van Timetable Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --windows -p always",
+    "build:mac": "electron-builder --mac"
+  },
+  "author": "Mohammed Dhanji",
+  "license": "ISC",
+  "dependencies": {
+    "auto-launch": "^5.0.6",
+    "electron-log": "^5.4.2",
+    "electron-updater": "^6.6.2",
+    "firebase": "^10.14.1"
+  },
+  "devDependencies": {
+    "electron": "^25.9.8",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.ibt.timetable.app",
+    "productName": "IBT Timetable",
+    "asar": true,
+    "files": [
+      "**/*",
+      "main.js",
+      "preload.js",
+      "index.html",
+      "styles.css",
+      "script.js",
+      "icon.png",
+      "data-manager.js",
+      "data/**/*",
+      "version.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icon.png",
+      "hardenedRuntime": true
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "IBT Timetable"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "mhdhanji",
+      "repo": "ibt-timetable-app"
+    }
+  },
+  "keywords": []
+}
