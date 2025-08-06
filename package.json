@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "build:win": "electron-builder --windows -p always",
-    "build:mac": "electron-builder --mac"
+    "build:mac": "electron-builder --mac",
+    "publish": "electron-builder --publish always"
   },
   "author": "Mohammed Dhanji",
   "license": "ISC",
