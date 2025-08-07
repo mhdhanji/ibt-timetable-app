@@ -1,3 +1,4 @@
+let lastTenMinuteWarningCheck = null;
 let overlayTimeoutHandle = null;
 let lastOverlayMsg = "";
 let lastOverlayType = "";
@@ -366,14 +367,8 @@ function checkDepartures(ibtData) {
     }
 }
 
-let lastTenMinuteCheck = null;
-
 function checkUpcomingDepartures(ibtData) {
     const now = new Date();
-    const currentMinuteKey = `${now.getHours()}:${now.getMinutes()}`;
-    if (lastTenMinuteCheck === currentMinuteKey) return; // Only announce once per minute
-    lastTenMinuteCheck = currentMinuteKey;
-
     const isSaturday = useWeekendTimes;
     const warnings = [];
 
@@ -412,8 +407,34 @@ function checkUpcomingDepartures(ibtData) {
         allowedLabels.some(label => warn.label === label)
     );
 
+    // ---- PATCH: Desktop Notification for 10-min Warning ----
+    // Only once per minute, per table section, for unique warnings
     if (filteredWarnings.length) {
-        // Announce all warnings in this minute (will repeat the next minute for new ones)
+        const warningKey = filteredWarnings.map(w => `${w.label} at ${w.t}`).join(',');
+        const now = new Date();
+        const currentMinute = `${now.getHours()}:${now.getMinutes()}`;
+        if (lastTenMinuteWarningCheck !== currentMinute + "-" + allowedLabels.join(',')) {
+            if (window.electronAPI && typeof window.electronAPI.showNotification === "function") {
+                window.electronAPI.showNotification(
+                  filteredWarnings.length > 1
+                    ? "10 MINUTES TO MULTIPLE DEPARTURES"
+                    : "10 MINUTES TO DEPARTURE",
+                  filteredWarnings.map(warn => `${warn.label} at ${warn.t}`).join(', ')
+                );
+            } else if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(
+                  filteredWarnings.length > 1
+                    ? "10 MINUTES TO MULTIPLE DEPARTURES"
+                    : "10 MINUTES TO DEPARTURE",
+                  { body: filteredWarnings.map(warn => `${warn.label} at ${warn.t}`).join(', ') }
+                );
+            }
+            lastTenMinuteWarningCheck = currentMinute + "-" + allowedLabels.join(',');
+        }
+    }
+    // ---- END PATCH ----
+    if (filteredWarnings.length) {
+        // Announce all filtered warnings in this tick (every second)
         const msgText = filteredWarnings.map(warn => `${warn.label} at ${warn.t}`).join(', ');
         speakFiveMinMessage(`Attention please. ${msgText} will depart in 10 minutes.`);
         showOverlay(
