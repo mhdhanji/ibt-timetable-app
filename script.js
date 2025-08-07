@@ -4,7 +4,6 @@ let lastOverlayMsg = "";
 let lastOverlayType = "";
 let lastOverlaySection = "";
 let lastOverlayTimeoutStart = 0;
-let tenMinuteWarningState = {};
 // Toast for updater messages
 function showUpdateToast(message) {
     let toast = document.getElementById('app-update-toast');
@@ -368,24 +367,41 @@ function checkDepartures(ibtData) {
     }
 }
 
+let lastTenMinuteAnnounceCheck = ""; // in "HH:mm" format, only once per minute
+let pendingTenMinuteRepeats = {}; // e.g. { 'maskew-section|Maskew IBT at 13:20': { time: 1691399440000, spoken: 1 } }
+
 function checkUpcomingDepartures(ibtData) {
     const now = new Date();
-    const nowMs = now.getTime();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentSecond = now.getSeconds();
+    const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
+    // Calculate what time is 10 minutes from now
+    const tenMinLater = new Date(now.getTime() + 10 * 60 * 1000);
+    const tenMinStr = `${String(tenMinLater.getHours()).padStart(2, '0')}:${String(tenMinLater.getMinutes()).padStart(2, '0')}`;
+
+    // Only fire at start of each minute (first announcement)
+    let firstAnnounceNow = false;
+    if (lastTenMinuteAnnounceCheck !== currentTimeStr) {
+        lastTenMinuteAnnounceCheck = currentTimeStr;
+        firstAnnounceNow = true;
+    }
+
     const isSaturday = useWeekendTimes;
     const warnings = [];
+
+    // Helper: Check if a time matches the "10 min from now" mark
+    function matchesTenMinTime(timeStr) {
+        if (!timeStr.includes(':')) return false;
+        const [h, m] = timeStr.split(':').map(Number);
+        return h === tenMinLater.getHours() && m === tenMinLater.getMinutes();
+    }
 
     const checkTimes = (times, label) => {
         Object.values(times)
             .map(normalizeTimeFormat)
-            .forEach(t => {
-                if (!t.includes(':')) return;
-                const [h, m] = t.split(':').map(Number);
-                const depTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
-                const diff = (depTime - now) / (1000 * 60);
-                if (diff > 9.9 && diff < 10.1) { // 10 min warning window
-                    warnings.push({ label, t, depMs: depTime.getTime() });
-                }
-            });
+            .forEach(t => { if (matchesTenMinTime(t)) warnings.push({ label, t }); });
     };
 
     checkTimes(isSaturday ? ibtData.maskew_avenue_saturday_times : ibtData.maskew_avenue_weekday_times, 'Maskew IBT');
@@ -393,61 +409,58 @@ function checkUpcomingDepartures(ibtData) {
     checkTimes(isSaturday ? ibtData.market_deeping_saturday_times : ibtData.market_deeping_weekday_times, 'Market IBT');
     checkTimes(isSaturday ? ibtData.fengate_saturday_times : ibtData.fengate_weekday_times, 'Wisbech IBT TO HD');
 
-    // Filter warnings by active table
+    // Filter by active table as before
     const activeSection = document.querySelector('.timetable-section.active');
     let allowedLabels = [];
     if (activeSection) {
-        if (activeSection.id === 'maskew-section') {
-            allowedLabels = ['Maskew IBT', 'Maskew IBT TO WB'];
-        } else if (activeSection.id === 'market-section') {
-            allowedLabels = ['Market IBT'];
-        } else if (activeSection.id === 'fengate-section') {
-            allowedLabels = ['Wisbech IBT TO HD'];
-        }
+        if (activeSection.id === 'maskew-section') allowedLabels = ['Maskew IBT', 'Maskew IBT TO WB'];
+        else if (activeSection.id === 'market-section') allowedLabels = ['Market IBT'];
+        else if (activeSection.id === 'fengate-section') allowedLabels = ['Wisbech IBT TO HD'];
     }
-    const filteredWarnings = warnings.filter(warn =>
-        allowedLabels.some(label => warn.label === label)
-    );
+    const filteredWarnings = warnings.filter(warn => allowedLabels.some(label => warn.label === label));
 
-    // Keyed by section|label|time
-    let overlayToShow = null;
-    let toSpeak = [];
-
+    // Fire the main 10 min announcement, only once per event per minute
     filteredWarnings.forEach(warn => {
-        const key = (activeSection ? activeSection.id : "") + "|" + warn.label + "|" + warn.t;
-        const state = tenMinuteWarningState[key] || { firstTime: 0, lastOverlay: 0, spoken: 0 };
-
-        // If new or expired, reset state
-        if (!tenMinuteWarningState[key] || (nowMs - state.firstTime) > 60000) {
-            tenMinuteWarningState[key] = { firstTime: nowMs, lastOverlay: 0, spoken: 0 };
-        }
-        // Announce if less than 2 times (at 0 and 30 sec after)
-        if (tenMinuteWarningState[key].spoken < 2 && (nowMs - tenMinuteWarningState[key].firstTime) >= tenMinuteWarningState[key].spoken * 30000) {
-            toSpeak.push(warn);
-            tenMinuteWarningState[key].spoken++;
-            tenMinuteWarningState[key].lastOverlay = nowMs;
-        }
-        // Overlay should be shown if within 60 sec of first warning
-        if ((nowMs - tenMinuteWarningState[key].firstTime) < 60000) {
-            overlayToShow = overlayToShow || [];
-            overlayToShow.push(warn);
+        const eventKey = `${activeSection.id}|${warn.label} at ${warn.t}`;
+        if (firstAnnounceNow) {
+            // Fire first announcement
+            speakFiveMinMessage(`Attention please. ${warn.label} at ${warn.t} will depart in 10 minutes.`);
+            showOverlay(
+                '10 MINUTES TO DEPARTURE',
+                `${warn.label} at ${warn.t}`,
+                true
+            );
+            // Track this event so we can repeat after 30 seconds
+            pendingTenMinuteRepeats[eventKey] = {
+                fireAt: now.getTime() + 30000, // 30 seconds from now
+                fired: false
+            };
         }
     });
 
-    // Show overlay if needed (when in active window, even after switching table)
-    if (overlayToShow && overlayToShow.length) {
-        const msgText = overlayToShow.map(w => `${w.label} at ${w.t}`).join(', ');
-        showOverlay(
-            overlayToShow.length > 1 ? '10 MINUTES TO MULTIPLE DEPARTURES' : '10 MINUTES TO DEPARTURE',
-            msgText,
-            true
-        );
-    }
-
-    // Speak messages if needed
-    if (toSpeak.length) {
-        const msgText = toSpeak.map(warn => `${warn.label} at ${warn.t}`).join(', ');
-        speakFiveMinMessage(`Attention please. ${msgText} will depart in 10 minutes.`);
+    // Repeat 30s after first, but only once
+    for (const eventKey in pendingTenMinuteRepeats) {
+        const ev = pendingTenMinuteRepeats[eventKey];
+        // Only repeat if it's now past fireAt but not fired yet
+        if (!ev.fired && now.getTime() >= ev.fireAt && now.getTime() - ev.fireAt < 30000) { // repeat only for 30s window
+            // Parse key
+            const match = eventKey.match(/^[^|]+\|(.+) at (\d{2}:\d{2})$/);
+            if (match) {
+                const label = match[1];
+                const t = match[2];
+                speakFiveMinMessage(`Attention please. ${label} at ${t} will depart in 10 minutes.`);
+                showOverlay(
+                    '10 MINUTES TO DEPARTURE',
+                    `${label} at ${t}`,
+                    true
+                );
+                ev.fired = true;
+            }
+        }
+        // Clean up any repeats older than 90 seconds
+        if (now.getTime() - ev.fireAt > 60000) {
+            delete pendingTenMinuteRepeats[eventKey];
+        }
     }
 }
 
