@@ -247,7 +247,11 @@ function speakMessage(message) {
     window.speechSynthesis.speak(utterance);
 }
 
-function speakFiveMinMessage(message) {
+// Robust 10-min warning: two announcements, one at t-10:00, one at t-9:30, tracked by pendingTenMinuteSpeech
+let pendingTenMinuteSpeech = {};
+
+function speakFiveMinMessage(message, eventKey) {
+    // eventKey is required for robust two-announcement logic
     if (isMuted) return;
     const activeSection = document.querySelector('.timetable-section.active');
     if (activeSection) {
@@ -263,16 +267,23 @@ function speakFiveMinMessage(message) {
     }
     // Replace "at XX:YY" or "in XX:YY" with formatted time for speech
     message = message.replace(/at (\d{1,2}:\d{2})/g, (m, t) => `at ${formatTimeForSpeech(t)}`);
-    const utterance = new SpeechSynthesisUtterance(message);
-    utterance.volume = speechVolume;
-    utterance.onend = () => {
-        setTimeout(() => {
-            const secondUtterance = new SpeechSynthesisUtterance(message);
-            secondUtterance.volume = speechVolume;
-            window.speechSynthesis.speak(secondUtterance);
-        }, 10000);
-    };
-    window.speechSynthesis.speak(utterance);
+    // Only speak if not already spoken for this eventKey at this announcement number
+    if (!eventKey) {
+        // fallback: just speak once
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.volume = speechVolume;
+        window.speechSynthesis.speak(utterance);
+        return;
+    }
+    // eventKey should be like "sectionId|Label at HH:MM"
+    if (!pendingTenMinuteSpeech[eventKey]) return; // safety
+    // Only speak if not already spoken for this announcement number
+    if (pendingTenMinuteSpeech[eventKey].spoken < 2) {
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.volume = speechVolume;
+        window.speechSynthesis.speak(utterance);
+        pendingTenMinuteSpeech[eventKey].spoken++;
+    }
 }
 
 function showOverlay(mainText, detailText, isWarning = false) {
@@ -370,6 +381,16 @@ function checkDepartures(ibtData) {
 let lastTenMinuteAnnounceCheck = ""; // in "HH:mm" format, only once per minute
 let pendingTenMinuteRepeats = {}; // e.g. { 'maskew-section|Maskew IBT at 13:20': { time: 1691399440000, spoken: 1 } }
 
+function cleanupOldTenMinuteRepeats() {
+    // Remove any pendingTenMinuteSpeech events older than 90s from their first announcement
+    const now = Date.now();
+    for (const eventKey in pendingTenMinuteSpeech) {
+        if (now - pendingTenMinuteSpeech[eventKey].firstAnnouncedAt > 90000) {
+            delete pendingTenMinuteSpeech[eventKey];
+        }
+    }
+}
+
 function checkUpcomingDepartures(ibtData) {
     const now = new Date();
     const currentHour = now.getHours();
@@ -380,6 +401,10 @@ function checkUpcomingDepartures(ibtData) {
     // Calculate what time is 10 minutes from now
     const tenMinLater = new Date(now.getTime() + 10 * 60 * 1000);
     const tenMinStr = `${String(tenMinLater.getHours()).padStart(2, '0')}:${String(tenMinLater.getMinutes()).padStart(2, '0')}`;
+
+    // Calculate what time is 9.5 minutes from now (for second announcement)
+    const nineHalfMinLater = new Date(now.getTime() + 9.5 * 60 * 1000);
+    const nineHalfMinStr = `${String(nineHalfMinLater.getHours()).padStart(2, '0')}:${String(nineHalfMinLater.getMinutes()).padStart(2, '0')}`;
 
     // Only fire at start of each minute (first announcement)
     let firstAnnounceNow = false;
@@ -419,49 +444,49 @@ function checkUpcomingDepartures(ibtData) {
     }
     const filteredWarnings = warnings.filter(warn => allowedLabels.some(label => warn.label === label));
 
-    // Fire the main 10 min announcement, only once per event per minute
+    // Robust two-announcement logic for 10-min warning
     filteredWarnings.forEach(warn => {
         const eventKey = `${activeSection.id}|${warn.label} at ${warn.t}`;
-        if (firstAnnounceNow) {
-            // Fire first announcement
-            speakFiveMinMessage(`Attention please. ${warn.label} at ${warn.t} will depart in 10 minutes.`);
+        // If this eventKey is not tracked yet, or expired, add it
+        if (!pendingTenMinuteSpeech[eventKey]) {
+            pendingTenMinuteSpeech[eventKey] = {
+                spoken: 0,
+                firstAnnouncedAt: Date.now(),
+                eventTime: warn.t,
+                label: warn.label
+            };
+        }
+        // First announcement: at t-10:00 (minute boundary)
+        if (firstAnnounceNow && pendingTenMinuteSpeech[eventKey].spoken === 0) {
+            speakFiveMinMessage(`Attention please. ${warn.label} at ${warn.t} will depart in 10 minutes.`, eventKey);
             showOverlay(
                 '10 MINUTES TO DEPARTURE',
                 `${warn.label} at ${warn.t}`,
                 true
             );
-            // Track this event so we can repeat after 30 seconds
-            pendingTenMinuteRepeats[eventKey] = {
-                fireAt: now.getTime() + 30000, // 30 seconds from now
-                fired: false
-            };
+            // spoken incremented inside speakFiveMinMessage
         }
     });
 
-    // Repeat 30s after first, but only once
-    for (const eventKey in pendingTenMinuteRepeats) {
-        const ev = pendingTenMinuteRepeats[eventKey];
-        // Only repeat if it's now past fireAt but not fired yet
-        if (!ev.fired && now.getTime() >= ev.fireAt && now.getTime() - ev.fireAt < 30000) { // repeat only for 30s window
-            // Parse key
-            const match = eventKey.match(/^[^|]+\|(.+) at (\d{2}:\d{2})$/);
-            if (match) {
-                const label = match[1];
-                const t = match[2];
-                speakFiveMinMessage(`Attention please. ${label} at ${t} will depart in 10 minutes.`);
+    // Second announcement: 30s after first (t-9:30), robust timer logic
+    for (const eventKey in pendingTenMinuteSpeech) {
+        const ev = pendingTenMinuteSpeech[eventKey];
+        if (ev.spoken < 2) {
+            // If it has been at least 30s since firstAnnouncedAt, and not yet spoken twice
+            if (Date.now() - ev.firstAnnouncedAt >= 30000 && Date.now() - ev.firstAnnouncedAt < 90000) {
+                speakFiveMinMessage(`Attention please. ${ev.label} at ${ev.eventTime} will depart in 10 minutes.`, eventKey);
                 showOverlay(
                     '10 MINUTES TO DEPARTURE',
-                    `${label} at ${t}`,
+                    `${ev.label} at ${ev.eventTime}`,
                     true
                 );
-                ev.fired = true;
+                // spoken incremented inside speakFiveMinMessage
             }
         }
-        // Clean up any repeats older than 90 seconds
-        if (now.getTime() - ev.fireAt > 60000) {
-            delete pendingTenMinuteRepeats[eventKey];
-        }
     }
+
+    // Clean up old repeats
+    cleanupOldTenMinuteRepeats();
 }
 
 // ===== Main Loader =====
