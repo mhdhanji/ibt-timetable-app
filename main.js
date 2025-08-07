@@ -16,7 +16,7 @@ function createWindow() {
     height: 600,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.js'), // Ensure preload.js is included in the build/package
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -67,6 +67,15 @@ function createTray() {
         autoUpdater.checkForUpdates();
       },
     },
+    // Uncomment the following to enable DevTools in tray menu
+    // {
+    //   label: 'Toggle DevTools',
+    //   click: () => {
+    //     if (mainWindow) {
+    //       mainWindow.webContents.toggleDevTools();
+    //     }
+    //   },
+    // },
     { type: 'separator' },
     {
       label: 'Quit',
@@ -120,6 +129,12 @@ function setupDarkMode() {
 
 function setupPowerSaveBlocker() {
   powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  // Optional: stop the powerSaveBlocker on app quit to clean up explicitly
+  app.on('will-quit', () => {
+    if (powerSaveBlocker.isStarted(powerBlockerId)) {
+      powerSaveBlocker.stop(powerBlockerId);
+    }
+  });
 }
 
 function setupUpdater() {
@@ -143,6 +158,7 @@ function setupUpdater() {
 
   autoUpdater.on('error', (err) => {
     log.error('Error in auto-updater:', err);
+    if (mainWindow) mainWindow.webContents.send('update_error', err.message || String(err));
   });
 
   autoUpdater.on('download-progress', (progressObj) => {

@@ -3,6 +3,31 @@ let lastOverlayMsg = "";
 let lastOverlayType = "";
 let lastOverlaySection = "";
 let lastOverlayTimeoutStart = 0;
+// Toast for updater messages
+function showUpdateToast(message) {
+    let toast = document.getElementById('app-update-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'app-update-toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '30px';
+        toast.style.right = '30px';
+        toast.style.background = '#222';
+        toast.style.color = '#fff';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '8px';
+        toast.style.fontSize = '1.3rem';
+        toast.style.zIndex = 9999;
+        toast.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.display = 'block';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.display = 'none';
+    }, 4000);
+}
 console.log("Script loaded!");
 let isMuted = false;
 
@@ -123,6 +148,18 @@ function normalizeTimeFormat(timeStr) {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
+// Format a time string (e.g. "14:00") to speech-friendly format ("2 o'clock PM")
+function formatTimeForSpeech(timeStr) {
+    if (!timeStr || !timeStr.includes(':')) return timeStr;
+    let [hour, min] = timeStr.split(':').map(Number);
+    let suffix = hour >= 12 ? "PM" : "AM";
+    let hour12 = hour % 12;
+    if (hour12 === 0) hour12 = 12;
+    if (min === 0) return `${hour12} ${suffix}`;           // "2 PM"
+    if (min < 10) return `${hour12} oh ${min} ${suffix}`;  // "2 oh 5 PM"
+    return `${hour12} ${min} ${suffix}`;                   // "2 15 PM"
+}
+
 function getTimeStatus(timeStr) {
     if (!timeStr.includes(':')) return '';
     const now = new Date();
@@ -202,6 +239,8 @@ function speakMessage(message) {
             message = message.replace(/\bIBT TO HD\b/g, 'Inter Branch Transfer to Maskew Avenue');
         }
     }
+    // Replace "at XX:YY" or "in XX:YY" with formatted time for speech
+    message = message.replace(/at (\d{1,2}:\d{2})/g, (m, t) => `at ${formatTimeForSpeech(t)}`);
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.volume = speechVolume;
     window.speechSynthesis.speak(utterance);
@@ -221,6 +260,8 @@ function speakFiveMinMessage(message) {
             message = message.replace(/\bIBT TO HD\b/g, 'Inter Branch Transfer to Maskew Avenue');
         }
     }
+    // Replace "at XX:YY" or "in XX:YY" with formatted time for speech
+    message = message.replace(/at (\d{1,2}:\d{2})/g, (m, t) => `at ${formatTimeForSpeech(t)}`);
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.volume = speechVolume;
     utterance.onend = () => {
@@ -587,4 +628,13 @@ document.addEventListener('DOMContentLoaded', () => {
             wallboardBtn.textContent = !wallboardActive ? "Exit Wallboard Mode" : "Wallboard Mode";
         }
     });
+
+    // ===== Electron auto-updater feedback (system tray initiated) =====
+    if (window.electronAPI) {
+        window.electronAPI.onCheckingForUpdate(() => showUpdateToast("Checking for app updates..."));
+        window.electronAPI.onUpdateAvailable(() => showUpdateToast("Update available! Downloading..."));
+        window.electronAPI.onUpdateNotAvailable(() => showUpdateToast("No updates available, you are up to date!"));
+        window.electronAPI.onUpdateDownloaded(() => showUpdateToast("Update downloaded! Restart the app to apply the update."));
+        window.electronAPI.onUpdateError((_, msg) => showUpdateToast("Error checking for updates: " + msg));
+    }
 });
