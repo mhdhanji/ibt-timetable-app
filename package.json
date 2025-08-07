@@ -1,6 +1,6 @@
 {
   "name": "ibt-timetable-app",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "IBT-only Van Timetable Application",
   "main": "main.js",
   "scripts": {

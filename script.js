@@ -5,6 +5,40 @@ let lastOverlaySection = "";
 let lastOverlayTimeoutStart = 0;
 console.log("Script loaded!");
 let isMuted = false;
+
+function isSunday() {
+    return (new Date()).getDay() === 0;
+}
+
+function showNoRunsMessageForAllSections() {
+    document.querySelectorAll('.timetable-section').forEach(section => {
+        let msg = section.querySelector('.no-runs-message');
+        if (!msg) {
+            msg = document.createElement('div');
+            msg.className = 'no-runs-message';
+            msg.textContent = "No IBT runs on Sunday";
+            msg.style.fontSize = "2.2rem";
+            msg.style.fontWeight = "bold";
+            msg.style.textAlign = "center";
+            msg.style.margin = "3rem 0";
+            msg.style.color = "#b71c1c";
+            section.insertBefore(msg, section.querySelector('table'));
+        }
+        msg.style.display = "block";
+        // Hide the table
+        const table = section.querySelector('table');
+        if (table) table.style.display = "none";
+    });
+}
+
+function hideNoRunsMessageForAllSections() {
+    document.querySelectorAll('.timetable-section').forEach(section => {
+        let msg = section.querySelector('.no-runs-message');
+        if (msg) msg.style.display = "none";
+        const table = section.querySelector('table');
+        if (table) table.style.display = "";
+    });
+}
 // Persistent state for table and mute
 function saveLastTable(table) {
     localStorage.setItem('lastTable', table);
@@ -21,52 +55,50 @@ function getMuteState() {
 
 /* ===== Wallboard Mode Persistence and Toggle ===== */
 // Wallboard Mode UI patch
-function showWallboardExitButton(show) {
-    let exitBtn = document.getElementById('exit-wallboard-btn');
-    if (show) {
-        if (!exitBtn) {
-            exitBtn = document.createElement('button');
-            exitBtn.id = 'exit-wallboard-btn';
-            exitBtn.className = 'wallboard-exit-btn';
-            exitBtn.textContent = 'Exit Wallboard Mode';
-            exitBtn.style.position = 'fixed';
-            exitBtn.style.top = '';
-            exitBtn.style.bottom = '40px';   // or '20px'
-            exitBtn.style.right = '40px';    // or '20px'
-            exitBtn.style.zIndex = '10000';
-            exitBtn.style.fontSize = '1.5rem';
-            exitBtn.style.background = '#111';
-            exitBtn.style.color = '#fff';
-            exitBtn.style.border = '2px solid #fff';
-            exitBtn.style.padding = '10px 30px';
-            exitBtn.style.borderRadius = '7px';
-            exitBtn.style.cursor = 'pointer';
-            exitBtn.onclick = () => {
-                enableWallboardMode(false);
-                // UI sync: update main wallboard toggle button if present
-                const wallboardBtn = document.getElementById('wallboard-button');
-                if (wallboardBtn) {
-                    wallboardBtn.classList.remove('active');
-                    wallboardBtn.textContent = "Wallboard Mode";
-                }
-                showWallboardExitButton(false);
-            };
-            document.body.appendChild(exitBtn);
-        }
-    } else {
-        if (exitBtn) exitBtn.remove();
-    }
-}
+// function showWallboardExitButton(show) {
+//     let exitBtn = document.getElementById('exit-wallboard-btn');
+//     if (show) {
+//         if (!exitBtn) {
+//             exitBtn = document.createElement('button');
+//             exitBtn.id = 'exit-wallboard-btn';
+//             exitBtn.className = 'wallboard-exit-btn';
+//             exitBtn.textContent = 'Exit Wallboard Mode';
+//             exitBtn.style.position = 'fixed';
+//             exitBtn.style.top = '';
+//             exitBtn.style.bottom = '40px';   // or '20px'
+//             exitBtn.style.right = '40px';    // or '20px'
+//             exitBtn.style.zIndex = '10000';
+//             exitBtn.style.fontSize = '1.5rem';
+//             exitBtn.style.background = '#111';
+//             exitBtn.style.color = '#fff';
+//             exitBtn.style.border = '2px solid #fff';
+//             exitBtn.style.padding = '10px 30px';
+//             exitBtn.style.borderRadius = '7px';
+//             exitBtn.style.cursor = 'pointer';
+//             exitBtn.onclick = () => {
+//                 enableWallboardMode(false);
+//                 // UI sync: update main wallboard toggle button if present
+//                 const wallboardBtn = document.getElementById('wallboard-button');
+//                 if (wallboardBtn) {
+//                     wallboardBtn.classList.remove('active');
+//                     wallboardBtn.textContent = "Wallboard Mode";
+//                 }
+//                 showWallboardExitButton(false);
+//             };
+//             document.body.appendChild(exitBtn);
+//         }
+//     } else {
+//         if (exitBtn) exitBtn.remove();
+//     }
+// }
 function enableWallboardMode(enable) {
     const body = document.body;
     if (enable) {
         body.classList.add('wallboard');
         localStorage.setItem('wallboardMode', 'true');
-        showWallboardExitButton(true);
     } else {
         body.classList.remove('wallboard');
         localStorage.setItem('wallboardMode', 'false');
-        showWallboardExitButton(false);
     }
 }
 function loadWallboardMode() {
@@ -81,6 +113,8 @@ let useWeekendTimes = false;
 let lastDepartureCheck = null;
 let lastFiveMinuteCheck = null;
 let globalIbtData = null;
+
+let lastDayChecked = (new Date()).getDay();
 
 // ===== Utilities =====
 function normalizeTimeFormat(timeStr) {
@@ -341,8 +375,16 @@ function checkUpcomingDepartures(ibtData) {
 // ===== Main Loader =====
 async function loadTimetableData() {
     showLoading(true);
+    if (isSunday()) {
+        showNoRunsMessageForAllSections();
+        updateTimestamp();
+        showLoading(false);
+        return;
+    } else {
+        hideNoRunsMessageForAllSections();
+    }
     try {
-        const res = await fetch('data/ibt_data.json');
+        const res = await fetch('https://raw.githubusercontent.com/mhdhanji/ibt-timetable-app/data/data/ibt_data.json');
         const ibtData = await res.json();
         globalIbtData = ibtData;
         const isSaturday = useWeekendTimes;
@@ -496,6 +538,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 1000); // Check every second for the top of the minute
 
+    // ===== Auto-switch weekend mode at midnight (live day change support) =====
+    setInterval(() => {
+        const now = new Date();
+        if (now.getDay() !== lastDayChecked) {
+            lastDayChecked = now.getDay();
+            const wasWeekend = useWeekendTimes;
+            useWeekendTimes = now.getDay() === 6;
+            document.getElementById('day-toggle').checked = useWeekendTimes;
+            if (wasWeekend !== useWeekendTimes) {
+                loadTimetableData();
+            }
+        }
+    }, 60000); // Check every minute
+
     // ===== Wallboard Mode Initialization =====
     loadWallboardMode();
     const wallboardBtn = document.getElementById('wallboard-button');
@@ -504,15 +560,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const isActive = document.body.classList.contains('wallboard');
         wallboardBtn.classList.toggle('active', isActive);
         wallboardBtn.textContent = isActive ? "Exit Wallboard Mode" : "Wallboard Mode";
-        if (isActive) showWallboardExitButton(true);
-        else showWallboardExitButton(false);
 
         wallboardBtn.addEventListener('click', () => {
             const currentlyActive = document.body.classList.contains('wallboard');
             enableWallboardMode(!currentlyActive);
             wallboardBtn.classList.toggle('active', !currentlyActive);
             wallboardBtn.textContent = !currentlyActive ? "Exit Wallboard Mode" : "Wallboard Mode";
-            showWallboardExitButton(!currentlyActive);
         });
     }
+
+    // ===== Wallboard Mode Hotkey: Ctrl+W / Cmd+W =====
+    document.addEventListener('keydown', (e) => {
+        // Check for Ctrl+W (Win/Linux) or Cmd+W (Mac)
+        const isToggleHotkey = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w';
+        if (!isToggleHotkey) return;
+        e.preventDefault();
+
+        // Toggle wallboard mode
+        const wallboardActive = document.body.classList.contains('wallboard');
+        enableWallboardMode(!wallboardActive);
+
+        // Sync UI button (if present)
+        const wallboardBtn = document.getElementById('wallboard-button');
+        if (wallboardBtn) {
+            wallboardBtn.classList.toggle('active', !wallboardActive);
+            wallboardBtn.textContent = !wallboardActive ? "Exit Wallboard Mode" : "Wallboard Mode";
+        }
+    });
 });

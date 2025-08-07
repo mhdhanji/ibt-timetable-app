@@ -455,22 +455,27 @@ body.wallboard .exit-wallboard-btn {
 }
 
 body.wallboard .clock-container {
-    display: block !important;
+    position: relative;
+    margin-left: auto;
+    z-index: 2;
+    display: flex;
+    align-items: flex-start;
 }
+
 body.wallboard .message-overlay {
-    left: 40px !important;   /* Move flush left (instead of center) */
-    top: 42px !important;    /* Match clock vertical position */
-    right: unset !important;
+    position: fixed !important;
+    top: 32px !important;
+    right: 3vw !important;
+    left: unset !important;
+    min-width: 320px !important;
+    max-width: 35vw !important;
+    z-index: 1101 !important;
     transform: none !important;
-    min-width: 450px !important;
-    max-width: 40vw !important;
     text-align: left !important;
-    border-width: 5px !important;
-    z-index: 2000 !important;
+    border-radius: 18px !important;
+    padding: 2vw 2.8vw 2vw 2vw !important;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.18);
     font-size: 2vw !important;
-    padding: 2vw 2vw 2vw 2vw !important;
-    box-shadow: 0 4px 40px rgba(0,0,0,0.22);
-    border-radius: 20px;
 }
 
 body.wallboard .message-overlay .main-message {
@@ -518,4 +523,42 @@ body.wallboard td:not(:empty).time-thirty,
 body.wallboard td:not(:empty).time-fifteen,
 body.wallboard td:not(:empty).time-five {
     color: #111 !important;
+}
+
+body.wallboard .header {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    position: relative;
+    z-index: 1;
+}
+
+
+
+@media (max-width: 1300px) {
+    body.wallboard .message-overlay {
+        min-width: 220px !important;
+        max-width: 40vw !important;
+        font-size: 2.2vw !important;
+        right: 2vw !important;
+    }
+}
+@media (max-width: 900px) {
+    body.wallboard .message-overlay {
+        min-width: 160px !important;
+        max-width: 70vw !important;
+        font-size: 2.8vw !important;
+        right: 1vw !important;
+        top: 16px !important;
+        padding: 2vw 2vw !important;
+    }
+}
+
+.no-runs-message {
+    font-size: 2.2rem;
+    font-weight: bold;
+    text-align: center;
+    margin: 3rem 0;
+    color: #b71c1c;
+    letter-spacing: 0.04em;
 }
