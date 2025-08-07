@@ -8,9 +8,29 @@ let mainWindow;
 let tray;
 let powerBlockerId;
 
+// Request single instance lock to ensure only one instance of the app runs
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  // If another instance is already running, quit this one
+  app.quit();
+  return;
+}
+
+// Handle second instance: focus and restore the existing mainWindow
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
 const appName = 'IBT Timetable';
 
 function createWindow() {
+  if (mainWindow) {
+    return; // Prevent creating multiple windows
+  }
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -97,8 +117,10 @@ function createTray() {
 }
 
 function setupAutoLaunch() {
+  // Use app.getPath('exe') for reliable executable path on Mac/Win
   const autoLauncher = new AutoLaunch({
     name: appName,
+    path: app.getPath('exe'),
   });
 
   autoLauncher.isEnabled()
@@ -129,7 +151,7 @@ function setupDarkMode() {
 
 function setupPowerSaveBlocker() {
   powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
-  // Optional: stop the powerSaveBlocker on app quit to clean up explicitly
+  // Stop the powerSaveBlocker on app quit to clean up explicitly
   app.on('will-quit', () => {
     if (powerSaveBlocker.isStarted(powerBlockerId)) {
       powerSaveBlocker.stop(powerBlockerId);
@@ -178,6 +200,7 @@ function setupUpdater() {
   });
 }
 
+// Only create windows and setup app when ready and after obtaining the single instance lock
 app.whenReady().then(() => {
   createWindow();
   createTray();
@@ -185,20 +208,6 @@ app.whenReady().then(() => {
   setupDarkMode();
   setupPowerSaveBlocker();
   setupUpdater();
-
-  // Single instance lock
-  const gotTheLock = app.requestSingleInstanceLock();
-
-  if (!gotTheLock) {
-    app.quit();
-  } else {
-    app.on('second-instance', () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-      }
-    });
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
