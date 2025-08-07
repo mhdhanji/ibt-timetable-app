@@ -44,5 +44,3 @@ class DataManager {
     return await putResponse.json();
   }
 }
-
-export default DataManager;

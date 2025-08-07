@@ -27,6 +27,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.on('close', (event) => {
+    if (!app.isQuiting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+    return false;
+  });
 }
 
 function createTray() {
@@ -35,16 +43,35 @@ function createTray() {
     {
       label: 'Show IBT Timetable',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show();
+        if (mainWindow) mainWindow.show();
+        else createWindow();
+      },
+    },
+    {
+      label: 'Toggle Dark Mode',
+      click: () => {
+        if (nativeTheme.shouldUseDarkColors) {
+          nativeTheme.themeSource = 'light';
         } else {
-          createWindow();
+          nativeTheme.themeSource = 'dark';
+        }
+        if (mainWindow) {
+          mainWindow.webContents.send('dark-mode-toggled', nativeTheme.shouldUseDarkColors);
         }
       },
     },
     {
+      label: 'Check for Updates',
+      click: () => {
+        if (mainWindow) mainWindow.webContents.send('checking-for-update');
+        autoUpdater.checkForUpdates();
+      },
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
+        app.isQuiting = true;
         app.quit();
       },
     },
@@ -163,14 +190,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (powerSaveBlocker.isStarted(powerBlockerId)) {
-    powerSaveBlocker.stop(powerBlockerId);
-  }
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Keep the app running in the tray, do nothing here.
 });
 
 ipcMain.handle('open-external', (event, url) => {
   shell.openExternal(url);
+});
+
+ipcMain.on('dark-mode-toggled', (event, isDark) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('dark-mode-toggled', isDark);
+  }
 });

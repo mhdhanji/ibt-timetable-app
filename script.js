@@ -1,3 +1,9 @@
+let overlayTimeoutHandle = null;
+let lastOverlayMsg = "";
+let lastOverlayType = "";
+let lastOverlaySection = "";
+let lastOverlayTimeoutStart = 0;
+console.log("Script loaded!");
 let isMuted = false;
 // Persistent state for table and mute
 function saveLastTable(table) {
@@ -12,6 +18,64 @@ function saveMuteState(muted) {
 function getMuteState() {
     return localStorage.getItem('isMuted') === 'true';
 }
+
+/* ===== Wallboard Mode Persistence and Toggle ===== */
+// Wallboard Mode UI patch
+function showWallboardExitButton(show) {
+    let exitBtn = document.getElementById('exit-wallboard-btn');
+    if (show) {
+        if (!exitBtn) {
+            exitBtn = document.createElement('button');
+            exitBtn.id = 'exit-wallboard-btn';
+            exitBtn.className = 'wallboard-exit-btn';
+            exitBtn.textContent = 'Exit Wallboard Mode';
+            exitBtn.style.position = 'fixed';
+            exitBtn.style.top = '';
+            exitBtn.style.bottom = '40px';   // or '20px'
+            exitBtn.style.right = '40px';    // or '20px'
+            exitBtn.style.zIndex = '10000';
+            exitBtn.style.fontSize = '1.5rem';
+            exitBtn.style.background = '#111';
+            exitBtn.style.color = '#fff';
+            exitBtn.style.border = '2px solid #fff';
+            exitBtn.style.padding = '10px 30px';
+            exitBtn.style.borderRadius = '7px';
+            exitBtn.style.cursor = 'pointer';
+            exitBtn.onclick = () => {
+                enableWallboardMode(false);
+                // UI sync: update main wallboard toggle button if present
+                const wallboardBtn = document.getElementById('wallboard-button');
+                if (wallboardBtn) {
+                    wallboardBtn.classList.remove('active');
+                    wallboardBtn.textContent = "Wallboard Mode";
+                }
+                showWallboardExitButton(false);
+            };
+            document.body.appendChild(exitBtn);
+        }
+    } else {
+        if (exitBtn) exitBtn.remove();
+    }
+}
+function enableWallboardMode(enable) {
+    const body = document.body;
+    if (enable) {
+        body.classList.add('wallboard');
+        localStorage.setItem('wallboardMode', 'true');
+        showWallboardExitButton(true);
+    } else {
+        body.classList.remove('wallboard');
+        localStorage.setItem('wallboardMode', 'false');
+        showWallboardExitButton(false);
+    }
+}
+function loadWallboardMode() {
+    const isWallboard = localStorage.getItem('wallboardMode') === 'true';
+    enableWallboardMode(isWallboard);
+    const btn = document.getElementById('wallboard-button');
+    if (btn) btn.classList.toggle('active', isWallboard);
+}
+/* ===== END Wallboard Mode Section ===== */
 let speechVolume = 1.0;
 let useWeekendTimes = false;
 let lastDepartureCheck = null;
@@ -32,7 +96,7 @@ function getTimeStatus(timeStr) {
     const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
     const diff = (target - now) / (1000 * 60);
     if (diff < -0.5) return 'past';
-    if (diff <= 5) return 'time-five';
+    if (diff <= 10) return 'time-five';
     if (diff <= 15) return 'time-fifteen';
     if (diff <= 30) return 'time-thirty';
     return '';
@@ -72,10 +136,13 @@ function renderMatrixTable(bodyId, times, locations, grid) {
         locations.forEach(location => {
             const cell = document.createElement('td');
             const value = grid[location][time];
-            const timeStatus = getTimeStatus(time);
-            cell.className = timeStatus;
-            if (value) {
+            if (value && value.time) {
                 cell.textContent = value.time;
+                const timeStatus = getTimeStatus(value.time);
+                cell.className = timeStatus;
+            } else {
+                cell.textContent = "";
+                cell.className = "";
             }
             row.appendChild(cell);
         });
@@ -134,11 +201,39 @@ function speakFiveMinMessage(message) {
 
 function showOverlay(mainText, detailText, isWarning = false) {
     const overlay = document.getElementById('departure-message');
+    const activeSection = document.querySelector('.timetable-section.active');
+    const sectionId = activeSection ? activeSection.id : "";
+
+    // Only show if new event, or a different table, or last overlay finished
+    const now = Date.now();
+    if (
+        overlay.classList.contains('active') &&
+        lastOverlayMsg === mainText + detailText &&
+        lastOverlayType === (isWarning ? 'warn' : 'normal') &&
+        lastOverlaySection === sectionId &&
+        now - lastOverlayTimeoutStart < 58000 // <60s, allow a tiny margin
+    ) {
+        // Already active and same, skip
+        return;
+    }
+    lastOverlayMsg = mainText + detailText;
+    lastOverlayType = isWarning ? 'warn' : 'normal';
+    lastOverlaySection = sectionId;
+    lastOverlayTimeoutStart = now;
+
     overlay.querySelector('.main-message').textContent = mainText;
     overlay.querySelector('.detail-message').textContent = detailText;
     overlay.classList.add('active');
     if (isWarning) overlay.classList.add('five-minute');
-    setTimeout(() => overlay.classList.remove('active', 'five-minute'), 60000);
+    // Clear any previous timeout
+    if (overlayTimeoutHandle) clearTimeout(overlayTimeoutHandle);
+    overlayTimeoutHandle = setTimeout(() => {
+        overlay.classList.remove('active', 'five-minute');
+        lastOverlayMsg = "";
+        lastOverlayType = "";
+        lastOverlaySection = "";
+        lastOverlayTimeoutStart = 0;
+    }, 60000);
 }
 
 // ===== Checks =====
@@ -212,7 +307,7 @@ function checkUpcomingDepartures(ibtData) {
                 const [h, m] = t.split(':').map(Number);
                 const depTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
                 const diff = (depTime - now) / (1000 * 60);
-                if (diff > 4.9 && diff < 5.1) warnings.push(`${label} at ${t}`);
+                if (diff > 9.9 && diff < 10.1) warnings.push(`${label} at ${t}`);
             });
     };
 
@@ -237,8 +332,8 @@ function checkUpcomingDepartures(ibtData) {
         allowedLabels.some(label => warn.startsWith(label))
     );
     if (filteredWarnings.length) {
-        speakFiveMinMessage(`Attention please. ${filteredWarnings.join(', ')} will depart in 5 minutes.`);
-        showOverlay(filteredWarnings.length > 1 ? '5 MINUTES TO MULTIPLE DEPARTURES' : '5 MINUTES TO DEPARTURE', filteredWarnings.join(', '), true);
+        speakFiveMinMessage(`Attention please. ${filteredWarnings.join(', ')} will depart in 10 minutes.`);
+        showOverlay(filteredWarnings.length > 1 ? '10 MINUTES TO MULTIPLE DEPARTURES' : '10 MINUTES TO DEPARTURE', filteredWarnings.join(', '), true);
         lastFiveMinuteCheck = currentMinute;
     }
 }
@@ -247,7 +342,7 @@ function checkUpcomingDepartures(ibtData) {
 async function loadTimetableData() {
     showLoading(true);
     try {
-        const res = await fetch('https://raw.githubusercontent.com/mhdhanji/ibt-timetable-app/data/data/ibt_data.json');
+        const res = await fetch('data/ibt_data.json');
         const ibtData = await res.json();
         globalIbtData = ibtData;
         const isSaturday = useWeekendTimes;
@@ -315,8 +410,33 @@ function updateClock() {
     document.getElementById('clock').textContent = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 }
 
+function updateTimeBasedStyling() {
+    // Update for all tables (Maskew, Market, Wisbech)
+    document.querySelectorAll('.timetable-section table').forEach(table => {
+        table.querySelectorAll('td').forEach(cell => {
+            // Only update cells with a time value
+            if (cell.textContent && cell.textContent.includes(':')) {
+                // Remove any old time classes
+                cell.classList.remove('past', 'time-five', 'time-fifteen', 'time-thirty');
+                // Add new class according to its time
+                const timeStatus = getTimeStatus(cell.textContent);
+                if (timeStatus) cell.classList.add(timeStatus);
+            } else {
+                cell.classList.remove('past', 'time-five', 'time-fifteen', 'time-thirty');
+            }
+        });
+    });
+}
+
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOMContentLoaded fired");
+    // Listen for dark mode toggle events from main process
+    if (window.electron && typeof window.electron.onDarkModeToggle === 'function') {
+      window.electron.onDarkModeToggle((isDark) => {
+        document.body.classList.toggle('dark-mode', isDark);
+      });
+    }
     const today = new Date();
     if (today.getDay() === 6) useWeekendTimes = true;
 
@@ -375,4 +495,24 @@ document.addEventListener('DOMContentLoaded', () => {
             // showOverlay('Schedule Auto-Refreshed', 'Timetable has been updated for the next day.');
         }
     }, 1000); // Check every second for the top of the minute
+
+    // ===== Wallboard Mode Initialization =====
+    loadWallboardMode();
+    const wallboardBtn = document.getElementById('wallboard-button');
+    if (wallboardBtn) {
+        // Set initial text and active class
+        const isActive = document.body.classList.contains('wallboard');
+        wallboardBtn.classList.toggle('active', isActive);
+        wallboardBtn.textContent = isActive ? "Exit Wallboard Mode" : "Wallboard Mode";
+        if (isActive) showWallboardExitButton(true);
+        else showWallboardExitButton(false);
+
+        wallboardBtn.addEventListener('click', () => {
+            const currentlyActive = document.body.classList.contains('wallboard');
+            enableWallboardMode(!currentlyActive);
+            wallboardBtn.classList.toggle('active', !currentlyActive);
+            wallboardBtn.textContent = !currentlyActive ? "Exit Wallboard Mode" : "Wallboard Mode";
+            showWallboardExitButton(!currentlyActive);
+        });
+    }
 });

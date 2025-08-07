@@ -327,3 +327,195 @@ body.dark-mode .past { background-color: #8B0000 !important; }
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* ===== Portrait Mode Support ===== */
+@media (orientation: portrait), (max-width: 1000px) {
+    html, body {
+        /* Reduce side padding, more top/bottom spacing for vertical layout */
+        padding: 8px !important;
+        font-size: 120%;
+    }
+    .controls-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 24px;
+    }
+    .content {
+        height: calc(100vh - 140px) !important;
+        padding: 8px !important;
+    }
+    #clock {
+        font-size: 5vw !important;
+        padding: 2vw 5vw !important;
+    }
+    table, th, td {
+        font-size: 3vw !important;
+    }
+    .main-message { font-size: 6vw !important; }
+    .detail-message { font-size: 3vw !important; }
+}
+
+/* ===== Base Font Size Bump for Wallboards ===== */
+body, input, select, button {
+    font-size: 24px !important;
+}
+th, td {
+    font-size: 28px !important;
+    min-width: 110px;
+    min-height: 64px;
+}
+.subtitle { font-size: 32px !important; }
+.key-item { font-size: 22px !important; }
+#refresh-button, #table-select, .mute-button { font-size: 22px !important; }
+.timestamp { font-size: 18px !important; }
+.main-message { font-size: 38px !important; }
+.detail-message { font-size: 26px !important; }
+
+/* ===== Only color non-empty cells ===== */
+th, td {
+    transition: background 0.2s, color 0.2s;
+}
+td:not(:empty).time-thirty { background-color: #90EE90 !important; }
+td:not(:empty).time-fifteen { background-color: #FFFF00 !important; }
+td:not(:empty).time-five { background-color: #FFA500 !important; }
+td:not(:empty).past { background-color: #FF0000 !important; color: white !important; }
+
+/* Dark mode for non-empty cells */
+body.dark-mode td:not(:empty).time-thirty { background-color: #006400 !important; }
+body.dark-mode td:not(:empty).time-fifteen { background-color: #8B8B00 !important; }
+body.dark-mode td:not(:empty).time-five { background-color: #8B4500 !important; }
+body.dark-mode td:not(:empty).past { background-color: #8B0000 !important; }
+
+/* ===== Wallboard: Remove highlight from empty cells ===== */
+td:empty {
+    background: #fff !important;
+    color: #888 !important;
+    border: 1px solid #ddd !important;
+}
+body.dark-mode td:empty {
+    background: #222 !important;
+    color: #444 !important;
+    border-color: #444 !important;
+}
+
+body.wallboard {
+    background: #000 !important;
+    color: #fff !important;
+}
+body.wallboard .content {
+    background: #111 !important;
+    color: #fff !important;
+}
+body.wallboard table, body.wallboard th, body.wallboard td {
+    font-size: 3vw !important;
+}
+body.wallboard .main-message { font-size: 6vw !important; }
+body.wallboard .detail-message { font-size: 3vw !important; }
+body.wallboard .left-controls,
+body.wallboard .mute-container,
+body.wallboard .toggle-container {
+    display: none !important;
+}
+body.wallboard #clock {
+    font-size: 8vw !important;
+    background: #111 !important;
+}
+.wallboard-btn.active {
+    background: #111;
+    color: #fff;
+    border: 2px solid #009900;
+    font-weight: bold;
+}
+
+.exit-wallboard-btn {
+    display: none;
+    position: fixed;
+    top: 28px;
+    right: 40px;
+    z-index: 1100;
+    background: #ff3333;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 30px;
+    font-weight: bold;
+    padding: 18px 36px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+    cursor: pointer;
+    opacity: 0.96;
+    transition: background 0.3s, color 0.3s;
+}
+.exit-wallboard-btn:hover {
+    background: #fff;
+    color: #ff3333;
+    border: 2px solid #ff3333;
+}
+body.wallboard .exit-wallboard-btn {
+    display: block !important;
+}
+
+body.wallboard .clock-container {
+    display: block !important;
+}
+body.wallboard .message-overlay {
+    left: 40px !important;   /* Move flush left (instead of center) */
+    top: 42px !important;    /* Match clock vertical position */
+    right: unset !important;
+    transform: none !important;
+    min-width: 450px !important;
+    max-width: 40vw !important;
+    text-align: left !important;
+    border-width: 5px !important;
+    z-index: 2000 !important;
+    font-size: 2vw !important;
+    padding: 2vw 2vw 2vw 2vw !important;
+    box-shadow: 0 4px 40px rgba(0,0,0,0.22);
+    border-radius: 20px;
+}
+
+body.wallboard .message-overlay .main-message {
+    font-size: 2.8vw !important;
+}
+
+body.wallboard .message-overlay .detail-message {
+    font-size: 1.8vw !important;
+}
+/* ===== Section Header for Key Next to Title ===== */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 32px;
+}
+
+.section-header .subtitle {
+    margin-bottom: 0 !important;
+}
+
+.section-header .key {
+    margin-bottom: 0 !important;
+    gap: 14px;
+}
+
+/* Make the key larger and clearer in wallboard mode */
+body.wallboard .section-header .key {
+    gap: 2vw;
+    font-size: 2vw !important;
+}
+body.wallboard .section-header .key-item {
+    font-size: 2vw !important;
+    padding: 0.6vw 1.6vw !important;
+}
+
+/* ===== Wallboard mode: Key and cell time in black for 30/15/10 min ===== */
+body.wallboard .key-item.time-thirty,
+body.wallboard .key-item.time-fifteen,
+body.wallboard .key-item.time-five {
+    color: #111 !important;
+}
+body.wallboard td:not(:empty).time-thirty,
+body.wallboard td:not(:empty).time-fifteen,
+body.wallboard td:not(:empty).time-five {
+    color: #111 !important;
+}

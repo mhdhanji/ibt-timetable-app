@@ -45,3 +45,7 @@ contextBridge.exposeInMainWorld('appInfo', {
         electron: process.versions.electron
     })
 });
+
+contextBridge.exposeInMainWorld('electron', {
+  onDarkModeToggle: (cb) => ipcRenderer.on('dark-mode-toggled', (_, isDark) => cb(isDark)),
+});

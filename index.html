@@ -17,20 +17,13 @@
                 </select>
 
                 <button id="refresh-button">Refresh Data</button>
-
+                <button id="wallboard-button" class="wallboard-btn">Wallboard Mode</button>
                 <div class="toggle-container">
                     <label class="switch">
                         <input type="checkbox" id="day-toggle">
                         <span class="slider round"></span>
                     </label>
                     <span class="toggle-label">Weekend Mode</span>
-                </div>
-
-                <div class="key">
-                    <span class="key-item time-thirty">30 MIN</span>
-                    <span class="key-item time-fifteen">15 MIN</span>
-                    <span class="key-item time-five">5 MIN</span>
-                    <span class="key-item past">DEPARTED</span>
                 </div>
 
                 <div class="mute-container">
@@ -64,7 +57,15 @@
     <div class="content">
         <!-- Maskew Avenue Section -->
         <div id="maskew-section" class="timetable-section active">
-            <h2 class="subtitle">MASKEW AVENUE IBT RUNS</h2>
+            <div class="section-header">
+                <h2 class="subtitle">MASKEW AVENUE IBT RUNS</h2>
+                <div class="key">
+                    <span class="key-item time-thirty">30 MIN</span>
+                    <span class="key-item time-fifteen">15 MIN</span>
+                    <span class="key-item time-five">10 MIN</span>
+                    <span class="key-item past">DEPARTED</span>
+                </div>
+            </div>
             <div class="timestamp">Last Updated: <span id="update-time"></span></div>
             <table>
                 <thead>
@@ -79,7 +80,15 @@
 
         <!-- Market Deeping Section -->
         <div id="market-section" class="timetable-section">
-            <h2 class="subtitle">MARKET DEEPING IBT RUNS</h2>
+            <div class="section-header">
+                <h2 class="subtitle">MARKET DEEPING IBT RUNS</h2>
+                <div class="key">
+                    <span class="key-item time-thirty">30 MIN</span>
+                    <span class="key-item time-fifteen">15 MIN</span>
+                    <span class="key-item time-five">10 MIN</span>
+                    <span class="key-item past">DEPARTED</span>
+                </div>
+            </div>
             <div class="timestamp">Last Updated: <span id="update-time"></span></div>
             <table>
                 <thead>
@@ -93,7 +102,15 @@
 
         <!-- Wisbech Section -->
         <div id="fengate-section" class="timetable-section">
-            <h2 class="subtitle">WISBECH IBT TO HD RUNS</h2>
+            <div class="section-header">
+                <h2 class="subtitle">WISBECH IBT TO HD RUNS</h2>
+                <div class="key">
+                    <span class="key-item time-thirty">30 MIN</span>
+                    <span class="key-item time-fifteen">15 MIN</span>
+                    <span class="key-item time-five">10 MIN</span>
+                    <span class="key-item past">DEPARTED</span>
+                </div>
+            </div>
             <div class="timestamp">Last Updated: <span id="update-time"></span></div>
             <table>
                 <thead>
