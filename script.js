@@ -396,45 +396,52 @@ function checkUpcomingDepartures(ibtData) {
     const currentHour = now.getHours();
     const currentMinute = now.getMinutes();
     const currentSecond = now.getSeconds();
-    const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
-
-    // Calculate what time is 10 minutes from now
-    const tenMinLater = new Date(now.getTime() + 10 * 60 * 1000);
-    const tenMinStr = `${String(tenMinLater.getHours()).padStart(2, '0')}:${String(tenMinLater.getMinutes()).padStart(2, '0')}`;
-
-    // Calculate what time is 9.5 minutes from now (for second announcement)
-    const nineHalfMinLater = new Date(now.getTime() + 9.5 * 60 * 1000);
-    const nineHalfMinStr = `${String(nineHalfMinLater.getHours()).padStart(2, '0')}:${String(nineHalfMinLater.getMinutes()).padStart(2, '0')}`;
-
-    // Only fire at start of each minute (first announcement)
-    let firstAnnounceNow = false;
-    if (lastTenMinuteAnnounceCheck !== currentTimeStr) {
-        lastTenMinuteAnnounceCheck = currentTimeStr;
-        firstAnnounceNow = true;
-    }
+    const currentTimeMs = now.getTime();
 
     const isSaturday = useWeekendTimes;
     const warnings = [];
 
-    // Helper: Check if a time matches the "10 min from now" mark
-    function matchesTenMinTime(timeStr) {
-        if (!timeStr.includes(':')) return false;
+    // Helper: For each event time, check if now is within 10:00 to 9:50 before event (10 min window, first 10s only)
+    function getEventTimeMs(timeStr) {
+        if (!timeStr.includes(':')) return null;
         const [h, m] = timeStr.split(':').map(Number);
-        return h === tenMinLater.getHours() && m === tenMinLater.getMinutes();
+        const event = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+        return event.getTime();
     }
 
-    const checkTimes = (times, label) => {
+    function checkTimes(times, label) {
         Object.values(times)
             .map(normalizeTimeFormat)
-            .forEach(t => { if (matchesTenMinTime(t)) warnings.push({ label, t }); });
-    };
+            .forEach(t => {
+                const eventMs = getEventTimeMs(t);
+                if (eventMs == null) return;
+                const delta = eventMs - currentTimeMs;
+                // If event is 10:00 to 9:00 from now (in seconds: 600 to 540), and not already tracked or not spoken yet
+                if (delta >= 540000 && delta <= 600000) {
+                    warnings.push({ label, t, eventMs });
+                }
+            });
+    }
 
     checkTimes(isSaturday ? ibtData.maskew_avenue_saturday_times : ibtData.maskew_avenue_weekday_times, 'Maskew IBT');
     checkTimes(isSaturday ? ibtData.maskew_to_wisbech_saturday_times : ibtData.maskew_to_wisbech_weekday_times, 'Maskew IBT TO WB');
     checkTimes(isSaturday ? ibtData.market_deeping_saturday_times : ibtData.market_deeping_weekday_times, 'Market IBT');
     checkTimes(isSaturday ? ibtData.fengate_saturday_times : ibtData.fengate_weekday_times, 'Wisbech IBT TO HD');
 
-    // Filter by active table as before
+    // 1. Create/track events for ALL warnings, not filtered by tab, and use eventKey = label|time (no section id)
+    warnings.forEach(warn => {
+        const eventKey = `${warn.label}|${warn.t}`;
+        if (!pendingTenMinuteSpeech[eventKey]) {
+            pendingTenMinuteSpeech[eventKey] = {
+                spoken: 0,
+                firstAnnouncedAt: 0,
+                eventTime: warn.t,
+                label: warn.label
+            };
+        }
+    });
+
+    // 2. Only SPEAK/OVERLAY for the active tab at the moment of firing
     const activeSection = document.querySelector('.timetable-section.active');
     let allowedLabels = [];
     if (activeSection) {
@@ -442,49 +449,54 @@ function checkUpcomingDepartures(ibtData) {
         else if (activeSection.id === 'market-section') allowedLabels = ['Market IBT'];
         else if (activeSection.id === 'fengate-section') allowedLabels = ['Wisbech IBT TO HD'];
     }
-    const filteredWarnings = warnings.filter(warn => allowedLabels.some(label => warn.label === label));
-
-    // Robust two-announcement logic for 10-min warning
-    filteredWarnings.forEach(warn => {
-        const eventKey = `${activeSection.id}|${warn.label} at ${warn.t}`;
-        // If this eventKey is not tracked yet, or expired, add it
-        if (!pendingTenMinuteSpeech[eventKey]) {
-            pendingTenMinuteSpeech[eventKey] = {
-                spoken: 0,
-                firstAnnouncedAt: Date.now(),
-                eventTime: warn.t,
-                label: warn.label
-            };
-        }
-        // First announcement: at t-10:00 (minute boundary)
-        if (firstAnnounceNow && pendingTenMinuteSpeech[eventKey].spoken === 0) {
-            speakFiveMinMessage(`Attention please. ${warn.label} at ${warn.t} will depart in 10 minutes.`, eventKey);
-            showOverlay(
-                '10 MINUTES TO DEPARTURE',
-                `${warn.label} at ${warn.t}`,
-                true
-            );
-            // spoken incremented inside speakFiveMinMessage
+    warnings.forEach(warn => {
+        if (allowedLabels.includes(warn.label)) {
+            const eventKey = `${warn.label}|${warn.t}`;
+            if (
+                pendingTenMinuteSpeech[eventKey] &&
+                pendingTenMinuteSpeech[eventKey].spoken === 0
+            ) {
+                speakFiveMinMessage(`Attention please. ${warn.label} at ${warn.t} will depart in 10 minutes.`, eventKey);
+                showOverlay(
+                    '10 MINUTES TO DEPARTURE',
+                    `${warn.label} at ${warn.t}`,
+                    true
+                );
+                pendingTenMinuteSpeech[eventKey].firstAnnouncedAt = Date.now();
+            }
         }
     });
 
-    // Second announcement: 30s after first (t-9:30), robust timer logic
+    // 3. Second announcement (30s later) must also respect the active tab at that moment
     for (const eventKey in pendingTenMinuteSpeech) {
         const ev = pendingTenMinuteSpeech[eventKey];
-        if (ev.spoken < 2) {
-            // If it has been at least 30s since firstAnnouncedAt, and not yet spoken twice
-            if (Date.now() - ev.firstAnnouncedAt >= 30000 && Date.now() - ev.firstAnnouncedAt < 90000) {
-                speakFiveMinMessage(`Attention please. ${ev.label} at ${ev.eventTime} will depart in 10 minutes.`, eventKey);
-                showOverlay(
-                    '10 MINUTES TO DEPARTURE',
-                    `${ev.label} at ${ev.eventTime}`,
-                    true
-                );
-                // spoken incremented inside speakFiveMinMessage
-            }
+        // Compute allowedLabels again for the *current* active section
+        const activeSection2 = document.querySelector('.timetable-section.active');
+        let allowedLabels2 = [];
+        if (activeSection2) {
+            if (activeSection2.id === 'maskew-section') allowedLabels2 = ['Maskew IBT', 'Maskew IBT TO WB'];
+            else if (activeSection2.id === 'market-section') allowedLabels2 = ['Market IBT'];
+            else if (activeSection2.id === 'fengate-section') allowedLabels2 = ['Wisbech IBT TO HD'];
+        }
+        if (!allowedLabels2.includes(ev.label)) continue;
+        // Only if 30s have passed since firstAnnouncedAt, and less than 90s, and still within 10-min window
+        const eventMs = getEventTimeMs(ev.eventTime);
+        if (eventMs == null) continue;
+        const delta = eventMs - currentTimeMs;
+        if (
+            ev.spoken < 2 &&
+            delta >= 540000 && delta <= 600000 &&
+            Date.now() - ev.firstAnnouncedAt >= 30000 &&
+            Date.now() - ev.firstAnnouncedAt < 90000
+        ) {
+            speakFiveMinMessage(`Attention please. ${ev.label} at ${ev.eventTime} will depart in 10 minutes.`, eventKey);
+            showOverlay(
+                '10 MINUTES TO DEPARTURE',
+                `${ev.label} at ${ev.eventTime}`,
+                true
+            );
         }
     }
-
     // Clean up old repeats
     cleanupOldTenMinuteRepeats();
 }
@@ -713,4 +725,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.electronAPI.onUpdateDownloaded(() => showUpdateToast("Update downloaded! Restart the app to apply the update."));
         window.electronAPI.onUpdateError((_, msg) => showUpdateToast("Error checking for updates: " + msg));
     }
+
+    // ===== Visibilitychange: check for missed 10-min announcements when regaining focus =====
+    document.addEventListener('visibilitychange', () => {
+        if (globalIbtData) checkUpcomingDepartures(globalIbtData);
+    });
 });
